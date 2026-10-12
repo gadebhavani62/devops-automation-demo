@@ -20,36 +20,74 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
 
     env:
+      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
       IMAGE_NAME: ${{ vars.DOCKERHUB_USERNAME }}/devops-automation-demo
       CONTAINER_NAME: devops-demo
 
     steps:
+      # STEP 1: Checkout source code
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      # STEP 2: Run automated tests
       - name: Run Python unit tests
-        run: python3 -m unittest discover -v
+        run: |
+          echo "Running automated tests..."
+          python3 -m unittest discover -v
 
+      # STEP 3: Validate Docker Hub settings
+      - name: Validate Docker Hub configuration
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKERHUB_USERNAME" ]; then
+            echo "::error::DOCKERHUB_USERNAME repository variable is missing"
+            exit 1
+          fi
+
+          if [ -z "$DOCKERHUB_TOKEN" ]; then
+            echo "::error::DOCKERHUB_TOKEN repository secret is missing"
+            exit 1
+          fi
+
+          echo "Docker Hub configuration validated"
+
+      # STEP 4: Build Docker image
       - name: Build Docker image
         run: |
+          echo "Building Docker image..."
+
           docker build \
             -t "$IMAGE_NAME:${GITHUB_SHA}" \
             -t "$IMAGE_NAME:latest" .
 
+          echo "Docker image built successfully"
+
+      # STEP 5: Login to Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Push Docker image
+      # STEP 6: Push Docker image
+      - name: Push Docker image to Docker Hub
         run: |
+          echo "Pushing Docker images..."
+
           docker push "$IMAGE_NAME:${GITHUB_SHA}"
           docker push "$IMAGE_NAME:latest"
 
-      - name: Deploy application
+          echo "Docker images pushed successfully"
+
+      # STEP 7: Deploy application
+      - name: Deploy Docker container
         run: |
+          echo "Stopping existing container if present..."
+
           docker rm -f "$CONTAINER_NAME" || true
+
+          echo "Starting new Docker container..."
 
           docker run -d \
             --name "$CONTAINER_NAME" \
@@ -57,21 +95,35 @@ jobs:
             -p 127.0.0.1:8080:8080 \
             "$IMAGE_NAME:${GITHUB_SHA}"
 
+          echo "Docker container started"
+
+      # STEP 8: Verify application
       - name: Verify application health
         run: |
+          echo "Checking application availability..."
+
           for attempt in 1 2 3 4 5; do
             if curl -fsS http://127.0.0.1:8080/ > /dev/null; then
-              echo "Application deployed successfully!"
+              echo "Application is healthy!"
               exit 0
             fi
+
+            echo "Waiting for application..."
             sleep 2
           done
 
-          echo "Deployment health check failed"
+          echo "::error::Application health check failed"
           docker logs "$CONTAINER_NAME"
           exit 1
 
-      - name: Display deployment information
+      # STEP 9: Display deployment information
+      - name: Deployment summary
         run: |
+          echo "================================="
+          echo " DEVOPS AUTOMATION - SUCCESS"
+          echo "================================="
+          echo "Image: $IMAGE_NAME:${GITHUB_SHA}"
+          echo "Application: http://localhost:8080"
+          echo "================================="
+
           docker ps --filter "name=$CONTAINER_NAME"
-          echo "Image deployed: $IMAGE_NAME:${GITHUB_SHA}"
