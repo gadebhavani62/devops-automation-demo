@@ -1,0 +1,30 @@
+
+name: DevOps Automation Demo
+
+on:
+  workflow_dispatch:
+
+jobs:
+  automation-demo:
+    runs-on: [self-hosted, Linux, X64]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Display System Information
+        run: |
+          echo "DevOps Automation Demo Started"
+          whoami
+          hostname
+          uname -a
+
+      - name: Check System Resources
+        run: |
+          echo "Checking disk usage..."
+          df -h
+          echo "Checking memory usage..."
+          free -h
+
+      - name: Complete Automation
+        run: echo "DevOps automation completed successfully!"
